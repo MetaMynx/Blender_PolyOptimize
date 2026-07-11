@@ -14,12 +14,17 @@ from __future__ import annotations
 import bpy
 
 from . import util
-from .operators import OBJECT_OT_poly_optimize, SUPPORTED_MODES
+from .operators import (
+    OBJECT_OT_poly_optimize,
+    OBJECT_OT_poly_optimize_rebuild_uvs,
+    SUPPORTED_MODES,
+)
 
 # Property/heading/button labels as (basic, advanced) pairs. Only the
 # text shown in the panel changes; property names and tooltips do not.
 _LABELS: dict[str, tuple[str, str]] = {
     "output_mode": ("Result", "Output"),
+    "offset_gap": ("Gap Between Copies", "Offset Gap"),
     "angle_limit": ("Flatness Sensitivity", "Planar Tolerance"),
     "simplify_boundaries": (
         "Straighten Outlines", "Simplify Region Boundaries"
@@ -27,6 +32,7 @@ _LABELS: dict[str, tuple[str, str]] = {
     "triangulate": ("Convert to Triangles", "Triangulate Result"),
     "detail_percent": ("Detail Kept", "Decimate Ratio"),
     "use_weld": ("Merge Overlapping Points", "Weld Duplicate Vertices"),
+    "regenerate_uvs": ("Rebuild Texture Map (UVs)", "Regenerate UVs"),
     "weld_distance": ("Merge Distance", "Weld Distance"),
     "preserve_seams": ("Protect Texture Seams", "Preserve UV Seams"),
     "preserve_sharp": ("Protect Sharp Corners", "Preserve Sharp Edges"),
@@ -41,6 +47,7 @@ _LABELS: dict[str, tuple[str, str]] = {
     "heading_cleanup": ("Tidy Up", "Cleanup"),
     "heading_preserve": ("Protect", "Preserve"),
     "button": ("Simplify Model", "Optimize Polygons"),
+    "button_uvs": ("Rebuild Texture Map Only", "Rebuild UVs Only"),
 }
 
 
@@ -59,6 +66,8 @@ def _draw(layout: bpy.types.UILayout, context: bpy.types.Context) -> None:
     layout.use_property_decorate = False
 
     layout.prop(settings, "output_mode", text=label("output_mode"))
+    if settings.output_mode == "COPY_OFFSET":
+        layout.prop(settings, "offset_gap", text=label("offset_gap"))
 
     col = layout.column(heading=label("heading_planar"))
     col.prop(settings, "angle_limit", text=label("angle_limit"))
@@ -85,6 +94,7 @@ def _draw(layout: bpy.types.UILayout, context: bpy.types.Context) -> None:
     sub = col.column()
     sub.active = settings.use_weld
     sub.prop(settings, "weld_distance", text=label("weld_distance"))
+    col.prop(settings, "regenerate_uvs", text=label("regenerate_uvs"))
 
     col = layout.column(heading=label("heading_preserve"))
     col.prop(settings, "preserve_seams", text=label("preserve_seams"))
@@ -112,6 +122,11 @@ def _draw(layout: bpy.types.UILayout, context: bpy.types.Context) -> None:
         OBJECT_OT_poly_optimize.bl_idname,
         text=label("button"),
         icon="MOD_DECIM",
+    )
+    layout.operator(
+        OBJECT_OT_poly_optimize_rebuild_uvs.bl_idname,
+        text=label("button_uvs"),
+        icon="UV",
     )
 
     obj = context.active_object

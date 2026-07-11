@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+import math
+
 import bpy
 
 from . import core, util
 
-# Gap between the original and an offset copy, as a fraction of width.
-_OFFSET_MARGIN = 1.2
 # Modes the operator can run from. In Edit Mode the optimization is
 # confined to the selection and applied in place.
 SUPPORTED_MODES = {"OBJECT", "EDIT_MESH"}
@@ -93,6 +93,9 @@ class OBJECT_OT_poly_optimize(bpy.types.Operator):
             totals_after = _add_stats(totals_after, after)
             optimized.append(work)
 
+        if optimized and settings.regenerate_uvs:
+            _rebuild_uvs(context, optimized)
+
         if edit_mode:
             # Return to where the user was, success or not.
             bpy.ops.object.mode_set(mode="EDIT")
@@ -148,9 +151,91 @@ class OBJECT_OT_poly_optimize(bpy.types.Operator):
             original.hide_set(True)
             original.hide_render = True
         elif mode == "COPY_OFFSET":
-            copy.location.x += max(original.dimensions.x, 1.0) * _OFFSET_MARGIN
+            # Land beside the original regardless of its size: one full
+            # width along X, plus the user-configured gap.
+            copy.location.x += original.dimensions.x + settings.offset_gap
         # COPY_OVERLAP: nothing else to do — both stay in place.
         return copy
+
+
+class OBJECT_OT_poly_optimize_rebuild_uvs(bpy.types.Operator):
+    """Rebuild the whole texture layout (UV map) of the selected mesh
+    objects without changing their geometry"""
+
+    bl_idname = "object.poly_optimize_rebuild_uvs"
+    bl_label = "Rebuild UVs Only"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context: bpy.types.Context) -> bool:
+        if context.mode not in SUPPORTED_MODES:
+            cls.poll_message_set("Requires Object Mode or Edit Mode")
+            return False
+        return True
+
+    def execute(self, context: bpy.types.Context) -> set[str]:
+        edit_mode = context.mode == "EDIT_MESH"
+        if edit_mode:
+            targets = [
+                o for o in context.objects_in_mode if o.type == "MESH"
+            ]
+            bpy.ops.object.mode_set(mode="OBJECT")
+        else:
+            targets = [
+                o for o in _target_objects(context) if o.type == "MESH"
+            ]
+
+        if not targets:
+            self.report({"ERROR"}, "Select at least one mesh object")
+            if edit_mode:
+                bpy.ops.object.mode_set(mode="EDIT")
+            return {"CANCELLED"}
+
+        _rebuild_uvs(context, targets)
+        if edit_mode:
+            bpy.ops.object.mode_set(mode="EDIT")
+        self.report(
+            {"INFO"}, f"Rebuilt the UV layout of {len(targets)} object(s)"
+        )
+        return {"FINISHED"}
+
+
+def _rebuild_uvs(
+    context: bpy.types.Context, objects: list[bpy.types.Object]
+) -> None:
+    """Re-unwrap each object's whole mesh with Smart UV Project.
+
+    Always unwraps the entire mesh — re-unwrapping only a selection would
+    stack its new islands on top of the existing layout. Smart Project is
+    only available as an operator, so each object briefly enters Edit
+    Mode with everything selected; the user's element selection is saved
+    and restored around that (topology is unchanged by unwrapping, so the
+    flags map one-to-one). A UV map is created when none exists.
+    """
+    view_layer = context.view_layer
+    previous = view_layer.objects.active
+    for obj in objects:
+        mesh = obj.data
+        saved = (
+            [v.select for v in mesh.vertices],
+            [e.select for e in mesh.edges],
+            [p.select for p in mesh.polygons],
+        )
+        view_layer.objects.active = obj
+        bpy.ops.object.mode_set(mode="EDIT")
+        bpy.ops.mesh.select_all(action="SELECT")
+        bpy.ops.uv.smart_project(
+            angle_limit=math.radians(66.0), island_margin=0.02
+        )
+        bpy.ops.object.mode_set(mode="OBJECT")
+        mesh = obj.data
+        for v, flag in zip(mesh.vertices, saved[0]):
+            v.select = flag
+        for e, flag in zip(mesh.edges, saved[1]):
+            e.select = flag
+        for p, flag in zip(mesh.polygons, saved[2]):
+            p.select = flag
+    view_layer.objects.active = previous
 
 
 def _target_objects(context: bpy.types.Context) -> list[bpy.types.Object]:
@@ -200,9 +285,14 @@ def _summary(before: core.MeshStats, after: core.MeshStats) -> str:
     )
 
 
+_CLASSES = (OBJECT_OT_poly_optimize, OBJECT_OT_poly_optimize_rebuild_uvs)
+
+
 def register() -> None:
-    util.register_class_fresh(OBJECT_OT_poly_optimize)
+    for cls in _CLASSES:
+        util.register_class_fresh(cls)
 
 
 def unregister() -> None:
-    util.unregister_class_safe(OBJECT_OT_poly_optimize)
+    for cls in reversed(_CLASSES):
+        util.unregister_class_safe(cls)

@@ -82,6 +82,8 @@ parentheses.
 | Simplify Region Boundaries | Also straightens merged-region outlines — more reduction, but can open gaps; leave off for watertight output |
 | Triangulate Result | Convert merged n-gons back to triangles |
 | Weld Duplicate Vertices / Distance | Pre-merge coincident vertices |
+| Regenerate UVs | Rebuild the whole model’s UV map afterwards (Smart UV Project; creates one if missing) — always the full mesh, even for selection edits, so islands never overlap. Textures painted for the old layout will no longer line up |
+| Rebuild UVs Only (button) | Regenerate the whole UV layout without optimizing any geometry |
 | Preserve Seams / Sharp / Materials / UV Borders | Never merge faces across these boundaries (protects UVs and shading) |
 
 The panel shows live counts for the active object and a before/after
@@ -93,7 +95,8 @@ summary of the last run.
 - Vertex reduction is skipped (with a warning) on meshes with **shape
   keys**, since collapse decimation would discard them.
 - In *Copy — Offset* mode the **optimized copy** is placed beside the
-  original on the X axis.
+  original on the X axis; the gap between them is configurable in the
+  panel (appears when that mode is selected).
 - Aggressive planar tolerance (>10°) can flatten intentional curvature;
   preview with a copy mode before using In-Place.
 

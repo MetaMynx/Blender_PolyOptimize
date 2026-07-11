@@ -68,6 +68,18 @@ class PolyOptimizeSettings(bpy.types.PropertyGroup):
         items=OUTPUT_MODE_ITEMS,
         default="COPY_HIDE",
     )
+    offset_gap: FloatProperty(
+        name="Offset Gap",
+        description=(
+            "Empty space between the original and the optimized copy "
+            "when using the offset option — the copy is placed beside "
+            "the model's width plus this gap, along the X axis"
+        ),
+        subtype="DISTANCE",
+        default=0.5,
+        min=0.0,
+        soft_max=10.0,
+    )
     angle_limit: FloatProperty(
         name="Planar Tolerance",
         description=(
@@ -157,6 +169,18 @@ class PolyOptimizeSettings(bpy.types.PropertyGroup):
             "Removes more geometry, but can open small gaps between the "
             "model's sides — leave off for watertight results. "
             "(Technical: dissolve boundaries in limited dissolve)"
+        ),
+        default=False,
+    )
+    regenerate_uvs: BoolProperty(
+        name="Regenerate UVs",
+        description=(
+            "After optimizing, rebuild the texture layout (UV map) of "
+            "the whole model — even when only a selection was optimized, "
+            "so the layout stays clean. A new UV map is created if the "
+            "model has none. Warning: textures painted for the old "
+            "layout will no longer line up. (Technical: Smart UV Project "
+            "on all faces)"
         ),
         default=False,
     )
