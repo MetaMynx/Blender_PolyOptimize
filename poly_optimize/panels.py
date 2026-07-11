@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import bpy
 
+from . import util
 from .operators import OBJECT_OT_poly_optimize, SUPPORTED_MODES
 
 # Property/heading/button labels as (basic, advanced) pairs. Only the
@@ -76,7 +77,7 @@ def _draw(layout: bpy.types.UILayout, context: bpy.types.Context) -> None:
         text = (
             f"Keeps about {target:.1f}% of the detail"
             if basic
-            else f"Target ≈ {target:.1f}% of vertices"
+            else f"Target = {target:.1f}% of vertices"
         )
         col.label(text=text, icon="INFO")
 
@@ -116,8 +117,8 @@ def _draw(layout: bpy.types.UILayout, context: bpy.types.Context) -> None:
         box.label(text=f"Active: {obj.name}", icon="MESH_DATA")
         box.label(
             text=(
-                f"Verts {len(mesh.vertices):,} · "
-                f"Edges {len(mesh.edges):,} · "
+                f"Verts {len(mesh.vertices):,} | "
+                f"Edges {len(mesh.edges):,} | "
                 f"Faces {len(mesh.polygons):,}"
             )
         )
@@ -137,7 +138,9 @@ def _stat_row(
     layout: bpy.types.UILayout, label: str, before: int, after: int
 ) -> None:
     percent = ((before - after) / before * 100.0) if before else 0.0
-    layout.label(text=f"{label}: {before:,} → {after:,}  (−{percent:.1f}%)")
+    layout.label(
+        text=f"{label}: {before:,} -> {after:,}  (-{percent:.1f}%)"
+    )
 
 
 class VIEW3D_PT_poly_optimize(bpy.types.Panel):
@@ -200,7 +203,7 @@ _appended_menu: type | None = None
 def register() -> None:
     global _appended_menu
     for cls in _CLASSES:
-        bpy.utils.register_class(cls)
+        util.register_class_fresh(cls)
     for name in _MENU_CANDIDATES:
         menu = getattr(bpy.types, name, None)
         if menu is not None:
@@ -215,4 +218,4 @@ def unregister() -> None:
         _appended_menu.remove(_add_modifier_menu)
         _appended_menu = None
     for cls in reversed(_CLASSES):
-        bpy.utils.unregister_class(cls)
+        util.unregister_class_safe(cls)

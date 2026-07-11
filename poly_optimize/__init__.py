@@ -12,7 +12,7 @@ from __future__ import annotations
 bl_info = {
     "name": "PolyOptimize",
     "author": "Aria Cheng",
-    "version": (1, 2, 0),
+    "version": (1, 2, 1),
     "blender": (4, 2, 0),
     "location": "Properties > Modifiers and View3D > Sidebar > PolyOptimize",
     "description": (
@@ -28,10 +28,27 @@ _MODULES = (properties, operators, panels)
 
 
 def register() -> None:
-    for module in _MODULES:
-        module.register()
+    registered = []
+    try:
+        for module in _MODULES:
+            module.register()
+            registered.append(module)
+    except Exception:
+        # Roll back so a failed enable never leaves half-registered
+        # classes that would block the next attempt.
+        for module in reversed(registered):
+            try:
+                module.unregister()
+            except Exception:
+                pass
+        raise
 
 
 def unregister() -> None:
     for module in reversed(_MODULES):
-        module.unregister()
+        try:
+            module.unregister()
+        except Exception:
+            # Keep unregistering the rest even if one module was never
+            # (or is no longer) registered.
+            pass

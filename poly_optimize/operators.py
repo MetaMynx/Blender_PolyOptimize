@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import bpy
 
-from . import core
+from . import core, util
 
 # Gap between the original and an offset copy, as a fraction of width.
 _OFFSET_MARGIN = 1.2
@@ -153,8 +153,8 @@ def _summary(before: core.MeshStats, after: core.MeshStats) -> str:
 
 
 def register() -> None:
-    bpy.utils.register_class(OBJECT_OT_poly_optimize)
+    util.register_class_fresh(OBJECT_OT_poly_optimize)
 
 
 def unregister() -> None:
-    bpy.utils.unregister_class(OBJECT_OT_poly_optimize)
+    util.unregister_class_safe(OBJECT_OT_poly_optimize)

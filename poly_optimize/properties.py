@@ -20,6 +20,8 @@ from bpy.props import (
     IntProperty,
 )
 
+from . import util
+
 UI_MODE_ITEMS = (
     ("BASIC", "Basic", "Plain-language labels — great while learning"),
     ("ADVANCED", "Advanced", "Standard Blender terminology"),
@@ -190,12 +192,13 @@ class PolyOptimizeSettings(bpy.types.PropertyGroup):
 
 
 def register() -> None:
-    bpy.utils.register_class(PolyOptimizeSettings)
+    util.register_class_fresh(PolyOptimizeSettings)
     bpy.types.Scene.poly_optimize = bpy.props.PointerProperty(
         type=PolyOptimizeSettings
     )
 
 
 def unregister() -> None:
-    del bpy.types.Scene.poly_optimize
-    bpy.utils.unregister_class(PolyOptimizeSettings)
+    if hasattr(bpy.types.Scene, "poly_optimize"):
+        del bpy.types.Scene.poly_optimize
+    util.unregister_class_safe(PolyOptimizeSettings)
