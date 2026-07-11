@@ -5,14 +5,6 @@ models, SketchUp Make and Shapr3D exports, …) by merging coplanar faces
 into single planes and optionally halving vertex counts per reduction
 level.
 
-## Why Python, not C#?
-
-Blender add-ons must be written in Python — Blender embeds a Python
-interpreter and exposes its entire API (`bpy`, `bmesh`) through it. C# is
-not supported. The code is structured cleanly (separated engine / UI /
-operator layers, typed, documented) so it still reads well if you're used
-to C# conventions.
-
 ## Installation
 
 **Blender 4.2+ / 5.x (recommended):**
