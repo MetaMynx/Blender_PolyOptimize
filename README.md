@@ -1,0 +1,103 @@
+# PolyOptimize
+
+A Blender add-on that optimizes auto-generated 3D assets (AI-generated
+models, SketchUp Make and Shapr3D exports, …) by merging coplanar faces
+into single planes and optionally halving vertex counts per reduction
+level.
+
+## Why Python, not C#?
+
+Blender add-ons must be written in Python — Blender embeds a Python
+interpreter and exposes its entire API (`bpy`, `bmesh`) through it. C# is
+not supported. The code is structured cleanly (separated engine / UI /
+operator layers, typed, documented) so it still reads well if you're used
+to C# conventions.
+
+## Installation
+
+**Blender 4.2+ / 5.x (recommended):**
+
+1. Zip the `poly_optimize` folder (the zip must contain
+   `blender_manifest.toml` at its top level inside the folder).
+2. In Blender: `Edit > Preferences > Add-ons > ⌄ (top-right) > Install
+   from Disk…` and pick the zip.
+3. Enable **PolyOptimize** if it isn't enabled automatically.
+
+## Where to find it
+
+The panel appears in **two places** (shared settings):
+
+- **Properties editor > Modifier tab** (wrench icon) — below the modifier
+  stack, when a mesh object is active.
+- **3D Viewport > Sidebar (press N) > PolyOptimize tab.**
+- **Add Modifier > Edit > PolyOptimize** — runs the optimizer immediately
+  with the current panel settings. (Python add-ons can't register native
+  stack modifiers, so this is a shortcut entry, not a live modifier.)
+
+Settings do **not** live-preview like a modifier — they take effect when
+you click **Optimize Polygons**. The button works in Object Mode and Edit
+Mode (Edit Mode is switched out automatically).
+
+## How it works
+
+The pipeline runs in this order:
+
+1. **Weld** — merges duplicate vertices. Auto-generated meshes often have
+   split vertices along borders that would otherwise block face merging.
+2. **Vertex reduction** (optional) — collapse decimation where each level
+   halves the remaining vertex count: level 1 ≈ 50%, level 2 ≈ 25%,
+   level 3 ≈ 12.5%, and so on (`ratio = 0.5 ^ level`).
+3. **Planar merge** — the core step. Connected faces whose normals agree
+   within the **Planar Tolerance** angle are treated as one plane and
+   merged into a single n-gon. Interior edges and vertices are removed;
+   boundary vertices still used by non-coplanar neighboring faces are
+   preserved, so shared borders between the model's sides stay
+   watertight.
+4. **Cleanup** — degenerate leftovers are removed; optionally the result
+   is re-triangulated for game engines.
+
+## Basic / Advanced labels
+
+A toggle at the top of the panel switches all labels between
+plain-language wording (**Basic**, the default — e.g. "Flatness
+Sensitivity", "Protect Texture Seams") and standard Blender terminology
+(**Advanced** — e.g. "Planar Tolerance", "Preserve UV Seams"). Tooltips
+always show both: the plain explanation first, the technical term in
+parentheses.
+
+## Settings
+
+| Setting | Effect |
+| --- | --- |
+| Output | Copy + hide original / copy offset beside it / copy overlapping / in-place (undo to revert) |
+| Planar Tolerance | Max normal angle for faces to count as one plane (start at 1–5°) |
+| Vertex Reduction Level | 0 = off; each level halves remaining vertices |
+| Simplify Region Boundaries | Also straightens merged-region outlines — more reduction, but can open gaps; leave off for watertight output |
+| Triangulate Result | Convert merged n-gons back to triangles |
+| Weld Duplicate Vertices / Distance | Pre-merge coincident vertices |
+| Preserve Seams / Sharp / Materials / UV Borders | Never merge faces across these boundaries (protects UVs and shading) |
+
+The panel shows live counts for the active object and a before/after
+summary of the last run.
+
+## Notes and limitations
+
+- Run it in **Object Mode** with one or more mesh objects selected.
+- Vertex reduction is skipped (with a warning) on meshes with **shape
+  keys**, since collapse decimation would discard them.
+- In *Copy — Offset* mode the **optimized copy** is placed beside the
+  original on the X axis.
+- Aggressive planar tolerance (>10°) can flatten intentional curvature;
+  preview with a copy mode before using In-Place.
+
+## Project layout
+
+```
+poly_optimize/
+├── __init__.py             # registration + legacy bl_info
+├── blender_manifest.toml   # extension metadata (Blender 4.2+)
+├── core.py                 # pure mesh-optimization engine (no UI)
+├── operators.py            # the Optimize operator + output modes
+├── panels.py               # UI, registered in both locations
+└── properties.py           # shared Scene-level settings
+```
