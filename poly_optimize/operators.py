@@ -8,13 +8,15 @@ from . import core, util
 
 # Gap between the original and an offset copy, as a fraction of width.
 _OFFSET_MARGIN = 1.2
-# Modes the operator can run from (Edit Mode is switched out automatically).
+# Modes the operator can run from. In Edit Mode the optimization is
+# confined to the selection and applied in place.
 SUPPORTED_MODES = {"OBJECT", "EDIT_MESH"}
 
 
 class OBJECT_OT_poly_optimize(bpy.types.Operator):
-    """Merge coplanar faces and optionally reduce vertices on the
-    selected mesh objects"""
+    """Merge coplanar faces and optionally reduce detail. In Object Mode
+    this processes whole selected objects; in Edit Mode it processes only
+    the selected part of the mesh, in place"""
 
     bl_idname = "object.poly_optimize"
     bl_label = "Optimize Polygons"
@@ -25,36 +27,59 @@ class OBJECT_OT_poly_optimize(bpy.types.Operator):
         if context.mode not in SUPPORTED_MODES:
             cls.poll_message_set("Requires Object Mode or Edit Mode")
             return False
-        if not any(o.type == "MESH" for o in _target_objects(context)):
+        if context.mode == "OBJECT" and not any(
+            o.type == "MESH" for o in _target_objects(context)
+        ):
             cls.poll_message_set("Select at least one mesh object")
             return False
         return True
 
     def execute(self, context: bpy.types.Context) -> set[str]:
-        # bmesh edits require the mesh not to be in Edit Mode; switch out
-        # so the operator also works when launched from Edit Mode.
-        if context.mode != "OBJECT":
-            bpy.ops.object.mode_set(mode="OBJECT")
-
         settings = context.scene.poly_optimize
+        edit_mode = context.mode == "EDIT_MESH"
+
+        if edit_mode:
+            targets = self._edit_mode_targets(context)
+            if not targets:
+                self.report(
+                    {"ERROR"},
+                    "Nothing is selected — select part of the mesh first",
+                )
+                bpy.ops.object.mode_set(mode="EDIT")
+                return {"CANCELLED"}
+            if settings.output_mode != "IN_PLACE":
+                self.report(
+                    {"INFO"},
+                    "Edit Mode: changes the selection directly "
+                    "(Ctrl+Z to revert); the Result setting is ignored",
+                )
+        else:
+            targets = [
+                o for o in _target_objects(context) if o.type == "MESH"
+            ]
+
         params = core.OptimizeParams(
             angle_limit=settings.angle_limit,
             weld_distance=(
                 settings.weld_distance if settings.use_weld else 0.0
             ),
-            reduction_level=settings.reduction_level,
+            detail_ratio=settings.detail_percent / 100.0,
             delimit=settings.delimit_flags(),
             simplify_boundaries=settings.simplify_boundaries,
             triangulate=settings.triangulate,
+            only_selected=edit_mode,
         )
         depsgraph = context.evaluated_depsgraph_get()
 
-        targets = [o for o in _target_objects(context) if o.type == "MESH"]
         totals_before = totals_after = core.MeshStats(0, 0, 0)
         optimized: list[bpy.types.Object] = []
 
         for original in targets:
-            work = self._prepare_target(context, original, settings)
+            work = (
+                original
+                if edit_mode
+                else self._prepare_target(context, original, settings)
+            )
             try:
                 before, after, warnings = core.optimize_object(
                     work, params, depsgraph
@@ -68,13 +93,36 @@ class OBJECT_OT_poly_optimize(bpy.types.Operator):
             totals_after = _add_stats(totals_after, after)
             optimized.append(work)
 
+        if edit_mode:
+            # Return to where the user was, success or not.
+            bpy.ops.object.mode_set(mode="EDIT")
+        elif optimized:
+            _select_only(context, optimized)
+
         if not optimized:
             return {"CANCELLED"}
 
-        _select_only(context, optimized)
         _store_stats(settings, totals_before, totals_after)
         self.report({"INFO"}, _summary(totals_before, totals_after))
         return {"FINISHED"}
+
+    @staticmethod
+    def _edit_mode_targets(
+        context: bpy.types.Context,
+    ) -> list[bpy.types.Object]:
+        """Leave Edit Mode and return the edited meshes with a selection.
+
+        Selection flags on ``Mesh`` data are only synced back when leaving
+        Edit Mode, so the mode switch must happen before reading them.
+        """
+        candidates = [
+            o for o in context.objects_in_mode if o.type == "MESH"
+        ]
+        bpy.ops.object.mode_set(mode="OBJECT")
+        return [
+            o for o in candidates
+            if any(v.select for v in o.data.vertices)
+        ]
 
     def _prepare_target(
         self,
@@ -146,9 +194,9 @@ def _summary(before: core.MeshStats, after: core.MeshStats) -> str:
     saved = before.faces - after.faces
     percent = (saved / before.faces * 100.0) if before.faces else 0.0
     return (
-        f"Faces {before.faces:,} → {after.faces:,} "
+        f"Faces {before.faces:,} -> {after.faces:,} "
         f"({percent:.1f}% removed), "
-        f"verts {before.vertices:,} → {after.vertices:,}"
+        f"verts {before.vertices:,} -> {after.vertices:,}"
     )
 
 

@@ -35,8 +35,15 @@ The panel appears in **two places** (shared settings):
   stack modifiers, so this is a shortcut entry, not a live modifier.)
 
 Settings do **not** live-preview like a modifier — they take effect when
-you click **Optimize Polygons**. The button works in Object Mode and Edit
-Mode (Edit Mode is switched out automatically).
+you click **Optimize Polygons**. The button works in Object Mode and Edit Mode.
+
+**Edit Mode = partial optimization.** Select any part of the mesh
+(vertices, edges, or faces), and the optimizer processes only that
+selection, applied directly to the model (Ctrl+Z to revert — the Result
+dropdown is ignored in Edit Mode). Detail reduction is rescaled so
+"Detail Kept" applies to the selected region rather than the whole mesh,
+and the border between the selection and the rest of the mesh is never
+broken.
 
 ## How it works
 
@@ -44,9 +51,9 @@ The pipeline runs in this order:
 
 1. **Weld** — merges duplicate vertices. Auto-generated meshes often have
    split vertices along borders that would otherwise block face merging.
-2. **Vertex reduction** (optional) — collapse decimation where each level
-   halves the remaining vertex count: level 1 ≈ 50%, level 2 ≈ 25%,
-   level 3 ≈ 12.5%, and so on (`ratio = 0.5 ^ level`).
+2. **Detail reduction** (optional) — collapse decimation down to the
+   "Detail Kept" percentage (100% disables it, 50% keeps roughly half
+   the triangles).
 3. **Planar merge** — the core step. Connected faces whose normals agree
    within the **Planar Tolerance** angle are treated as one plane and
    merged into a single n-gon. Interior edges and vertices are removed;
@@ -71,7 +78,7 @@ parentheses.
 | --- | --- |
 | Output | Copy + hide original / copy offset beside it / copy overlapping / in-place (undo to revert) |
 | Planar Tolerance | Max normal angle for faces to count as one plane (start at 1–5°) |
-| Vertex Reduction Level | 0 = off; each level halves remaining vertices |
+| Detail Kept | Percentage of detail to keep before flattening; 100% = off, 50% keeps roughly half the triangles |
 | Simplify Region Boundaries | Also straightens merged-region outlines — more reduction, but can open gaps; leave off for watertight output |
 | Triangulate Result | Convert merged n-gons back to triangles |
 | Weld Duplicate Vertices / Distance | Pre-merge coincident vertices |
@@ -82,7 +89,7 @@ summary of the last run.
 
 ## Notes and limitations
 
-- Run it in **Object Mode** with one or more mesh objects selected.
+- In **Object Mode** it processes whole selected objects; in **Edit Mode** it processes the selected part of the active mesh, in place.
 - Vertex reduction is skipped (with a warning) on meshes with **shape
   keys**, since collapse decimation would discard them.
 - In *Copy — Offset* mode the **optimized copy** is placed beside the
@@ -94,10 +101,4 @@ summary of the last run.
 
 ```
 poly_optimize/
-├── __init__.py             # registration + legacy bl_info
-├── blender_manifest.toml   # extension metadata (Blender 4.2+)
-├── core.py                 # pure mesh-optimization engine (no UI)
-├── operators.py            # the Optimize operator + output modes
-├── panels.py               # UI, registered in both locations
-└── properties.py           # shared Scene-level settings
-```
+├── __init__.py             # 

@@ -82,17 +82,19 @@ class PolyOptimizeSettings(bpy.types.PropertyGroup):
         soft_max=math.radians(15.0),
         max=math.radians(60.0),
     )
-    reduction_level: IntProperty(
-        name="Vertex Reduction Level",
+    detail_percent: FloatProperty(
+        name="Detail Kept",
         description=(
-            "Reduces overall detail before flattening. Each level keeps "
-            "half of what the previous level kept: level 1 ≈ 50%, level 2 "
-            "≈ 25%, level 3 ≈ 12.5%. 0 turns this off. (Technical: "
-            "collapse decimation at ratio 0.5^level)"
+            "How much of the model's detail to keep before flattening. "
+            "100% turns reduction off; 50% keeps roughly half the "
+            "triangles. In Edit Mode this applies only to the selected "
+            "part of the model. (Technical: collapse-decimate ratio, "
+            "expressed as a percentage)"
         ),
-        default=0,
-        min=0,
-        max=8,
+        subtype="PERCENTAGE",
+        default=100.0,
+        min=1.0,
+        max=100.0,
     )
     use_weld: BoolProperty(
         name="Weld Duplicate Vertices",

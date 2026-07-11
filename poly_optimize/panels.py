@@ -25,7 +25,7 @@ _LABELS: dict[str, tuple[str, str]] = {
         "Straighten Outlines", "Simplify Region Boundaries"
     ),
     "triangulate": ("Convert to Triangles", "Triangulate Result"),
-    "reduction_level": ("Detail Reduction", "Vertex Reduction Level"),
+    "detail_percent": ("Detail Kept", "Decimate Ratio"),
     "use_weld": ("Merge Overlapping Points", "Weld Duplicate Vertices"),
     "weld_distance": ("Merge Distance", "Weld Distance"),
     "preserve_seams": ("Protect Texture Seams", "Preserve UV Seams"),
@@ -69,15 +69,14 @@ def _draw(layout: bpy.types.UILayout, context: bpy.types.Context) -> None:
 
     col = layout.column(heading=label("heading_reduce"))
     col.prop(
-        settings, "reduction_level", text=label("reduction_level"),
+        settings, "detail_percent", text=label("detail_percent"),
         slider=True,
     )
-    if settings.reduction_level > 0:
-        target = 0.5 ** settings.reduction_level * 100.0
+    if settings.detail_percent >= 99.999:
         text = (
-            f"Keeps about {target:.1f}% of the detail"
+            "100% = no reduction"
             if basic
-            else f"Target = {target:.1f}% of vertices"
+            else "Ratio 1.0 = decimation disabled"
         )
         col.label(text=text, icon="INFO")
 
@@ -98,7 +97,12 @@ def _draw(layout: bpy.types.UILayout, context: bpy.types.Context) -> None:
     )
 
     layout.separator()
-    if context.mode not in SUPPORTED_MODES:
+    if context.mode == "EDIT_MESH":
+        layout.label(
+            text="Applies to the selection, directly on the model",
+            icon="INFO",
+        )
+    elif context.mode != "OBJECT":
         layout.label(text="Switch to Object Mode to run", icon="ERROR")
     else:
         layout.label(
