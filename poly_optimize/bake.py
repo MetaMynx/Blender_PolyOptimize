@@ -86,7 +86,9 @@ def bake_to_new_layout(
     if stale is not None:
         mesh.uv_layers.remove(stale)
 
-    old_layer = mesh.uv_layers.active
+    old_name = (
+        mesh.uv_layers.active.name if mesh.uv_layers.active else None
+    )
     new_layer = mesh.uv_layers.new(name=_BAKE_LAYER)
     if new_layer is None:
         report(
@@ -99,7 +101,10 @@ def bake_to_new_layout(
 
     # Shaders sample the *render* map by default; the bake writes through
     # the *active* (selected) map. Point them at old and new respectively.
-    old_layer.active_render = True
+    # Layers are re-fetched by name: adding a layer can reallocate the
+    # collection and silently invalidate references taken earlier.
+    if old_name is not None:
+        mesh.uv_layers[old_name].active_render = True
     mesh.uv_layers.active = mesh.uv_layers[_BAKE_LAYER]
 
     materials = _node_materials(obj)
@@ -203,11 +208,41 @@ def _first_principled(
     return None
 
 
+def _surface_principled(
+    material: bpy.types.Material,
+) -> bpy.types.Node | None:
+    """The Principled node actually driving the material output.
+
+    Importers often leave disconnected leftover Principled nodes in the
+    tree, so "first Principled found" can land on a node whose inputs
+    are all defaults — which bakes flat grey. Walk back from the active
+    output through mix/add shaders instead; fall back to any Principled
+    when the chain is exotic.
+    """
+    tree = material.node_tree
+    output = tree.get_output_node("CYCLES")
+    if output is not None:
+        stack = [output.inputs["Surface"]]
+        visited = 0
+        while stack and visited < 32:
+            socket = stack.pop()
+            if not socket.is_linked:
+                continue
+            node = socket.links[0].from_node
+            visited += 1
+            if node.type == "BSDF_PRINCIPLED":
+                return node
+            for node_input in node.inputs:
+                if node_input.type == "SHADER":
+                    stack.append(node_input)
+    return _first_principled(material)
+
+
 def _needed_passes(materials: list[bpy.types.Material]) -> set[str]:
     """Colour always; other passes only when a material links that input."""
     passes = {"color"}
     for material in materials:
-        principled = _first_principled(material)
+        principled = _surface_principled(material)
         if principled is None:
             continue
         for pass_name, socket in (
@@ -222,7 +257,7 @@ def _needed_passes(materials: list[bpy.types.Material]) -> set[str]:
 
 def _capture_scalars(material: bpy.types.Material) -> dict:
     """Remember unlinked scalar inputs so the rewire can copy them."""
-    principled = _first_principled(material)
+    principled = _surface_principled(material)
     if principled is None:
         return {}
     values = {}
@@ -247,7 +282,7 @@ def _rig_channel_emission(material: bpy.types.Material, channel: str):
     surface = output.inputs["Surface"]
     original = surface.links[0].from_socket if surface.is_linked else None
 
-    principled = _first_principled(material)
+    principled = _surface_principled(material)
     if principled is None and channel == "color":
         # No Principled node (e.g. emission-only materials): the EMIT
         # bake captures the surface as-is; leave it unrigged.
@@ -257,6 +292,14 @@ def _rig_channel_emission(material: bpy.types.Material, channel: str):
     emission.name = _TEMP_EMIT
     if principled is not None:
         source = principled.inputs[_CHANNEL_SOCKETS[channel]]
+        if channel == "color" and not source.is_linked:
+            # Importers often wire screen/glow textures into the emission
+            # socket instead of Base Color — capture those as the colour.
+            emission_input = principled.inputs.get("Emission Color")
+            if emission_input is None:
+                emission_input = principled.inputs.get("Emission")
+            if emission_input is not None and emission_input.is_linked:
+                source = emission_input
         if source.is_linked:
             tree.links.new(
                 source.links[0].from_socket, emission.inputs["Color"]
