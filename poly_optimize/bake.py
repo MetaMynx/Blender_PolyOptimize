@@ -15,13 +15,17 @@ A full PBR set is baked, but each pass only when the object actually
 uses it (AI-generated assets commonly ship colour + roughness +
 metallic + normal maps; SketchUp assets usually just colour):
 
-- **colour** — always (Cycles diffuse pass, colour only).
+- **colour** — always.
 - **roughness / normal** — when a material links textures into those
   inputs. The normal bake captures bump and normal-map detail in
   tangent space of the new layout.
-- **metallic** — when linked; Blender has no metallic bake type, so the
-  metallic input is temporarily routed through an emission shader and
-  baked with the EMIT pass.
+- **metallic** — when linked.
+
+Colour, roughness and metallic are each captured by temporarily routing
+that channel through an emission shader and baking the EMIT pass. This
+is immune to the classic diffuse-bake failure where metallic or glossy
+surfaces (monitor screens, metal parts) bake black, because metals have
+no diffuse component.
 
 Unlinked scalar inputs (e.g. plain "roughness 0.4") are copied onto the
 rewired material instead of baking an image. Shared materials are
@@ -42,16 +46,19 @@ _TEMP_EMIT = "__poly_optimize_metallic_emit"
 
 # Pass name -> (bake operator kwargs, image colour space, float buffer)
 _PASS_CONFIG = {
-    "color": (
-        {"type": "DIFFUSE", "pass_filter": {"COLOR"}}, "sRGB", False
-    ),
-    "roughness": ({"type": "ROUGHNESS"}, "Non-Color", False),
+    "color": ({"type": "EMIT"}, "sRGB", False),
+    "roughness": ({"type": "EMIT"}, "Non-Color", False),
     "metallic": ({"type": "EMIT"}, "Non-Color", False),
     "normal": ({"type": "NORMAL"}, "Non-Color", True),
 }
-# Bake order: metallic last among colour-like passes so its emission
-# rig never overlaps another pass; normal needs no rig at all.
 _PASS_ORDER = ("color", "roughness", "metallic", "normal")
+# Channels captured through a temporary emission rig (see module doc).
+_EMISSION_PASSES = ("color", "roughness", "metallic")
+_CHANNEL_SOCKETS = {
+    "color": "Base Color",
+    "roughness": "Roughness",
+    "metallic": "Metallic",
+}
 
 
 def has_image_textures(obj: bpy.types.Object) -> bool:
@@ -130,15 +137,15 @@ def bake_to_new_layout(
                 node.image = image
 
             emission_rigs = []
-            if pass_name == "metallic":
+            if pass_name in _EMISSION_PASSES:
                 emission_rigs = [
-                    _rig_metallic_emission(m) for m in materials
+                    _rig_channel_emission(m, pass_name) for m in materials
                 ]
             try:
                 _run_bake(context, obj, resolution, bake_kwargs)
             finally:
                 for material, rig in zip(materials, emission_rigs):
-                    _unrig_metallic_emission(material, rig)
+                    _unrig_channel_emission(material, rig)
     except (RuntimeError, TypeError) as error:
         report({"WARNING"}, f"'{obj.name}': texture bake failed — {error}")
         _restore(mesh, images, temp_nodes, previous_active)
@@ -225,11 +232,13 @@ def _capture_scalars(material: bpy.types.Material) -> dict:
     return values
 
 
-def _rig_metallic_emission(material: bpy.types.Material):
-    """Route the metallic input through an emission shader for EMIT bake.
+def _rig_channel_emission(material: bpy.types.Material, channel: str):
+    """Route one Principled input through an emission shader for EMIT bake.
 
-    Returns (emission node, original from_socket, output socket) so the
-    rig can be undone exactly.
+    Immune to the diffuse-bake failure where metallic/glossy surfaces
+    bake black. Returns (emission node, original from_socket, output
+    socket) so the rig can be undone exactly, or None when the material
+    needs no rig (pure emission materials are already EMIT-bakeable).
     """
     tree = material.node_tree
     output = tree.get_output_node("CYCLES")
@@ -238,27 +247,34 @@ def _rig_metallic_emission(material: bpy.types.Material):
     surface = output.inputs["Surface"]
     original = surface.links[0].from_socket if surface.is_linked else None
 
+    principled = _first_principled(material)
+    if principled is None and channel == "color":
+        # No Principled node (e.g. emission-only materials): the EMIT
+        # bake captures the surface as-is; leave it unrigged.
+        return None
+
     emission = tree.nodes.new("ShaderNodeEmission")
     emission.name = _TEMP_EMIT
-    principled = _first_principled(material)
     if principled is not None:
-        metallic = principled.inputs["Metallic"]
-        if metallic.is_linked:
+        source = principled.inputs[_CHANNEL_SOCKETS[channel]]
+        if source.is_linked:
             tree.links.new(
-                metallic.links[0].from_socket, emission.inputs["Color"]
+                source.links[0].from_socket, emission.inputs["Color"]
             )
         else:
-            value = metallic.default_value
-            emission.inputs["Color"].default_value = (
-                value, value, value, 1.0
-            )
+            value = source.default_value
+            if hasattr(value, "__len__"):
+                rgba = (value[0], value[1], value[2], 1.0)
+            else:
+                rgba = (value, value, value, 1.0)
+            emission.inputs["Color"].default_value = rgba
     else:
         emission.inputs["Color"].default_value = (0.0, 0.0, 0.0, 1.0)
     tree.links.new(emission.outputs["Emission"], surface)
     return (emission, original, surface)
 
 
-def _unrig_metallic_emission(material: bpy.types.Material, rig) -> None:
+def _unrig_channel_emission(material: bpy.types.Material, rig) -> None:
     if rig is None:
         return
     emission, original, surface = rig

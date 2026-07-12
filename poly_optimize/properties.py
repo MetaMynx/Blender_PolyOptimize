@@ -194,9 +194,10 @@ class PolyOptimizeSettings(bpy.types.PropertyGroup):
             "always, plus roughness, metallic and normal/bump maps when "
             "the materials use them; plain number values are copied "
             "directly. Materials are simplified to a standard textured "
-            "shader. (Technical: Cycles bakes — diffuse colour, "
-            "roughness, EMIT-routed metallic, tangent normals — from "
-            "the old UV map into atlases on the rebuilt map)"
+            "shader. (Technical: Cycles EMIT bakes of the base-colour, "
+            "roughness and metallic channels via temporary emission "
+            "routing, plus a tangent-space normal bake — from the old "
+            "UV map into atlases on the rebuilt map)"
         ),
         default=True,
     )
