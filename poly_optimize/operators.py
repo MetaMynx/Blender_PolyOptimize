@@ -94,7 +94,7 @@ class OBJECT_OT_poly_optimize(bpy.types.Operator):
             optimized.append(work)
 
         if optimized and settings.regenerate_uvs:
-            _rebuild_uvs(context, optimized)
+            _rebuild_uvs(context, optimized, self.report)
 
         if edit_mode:
             # Return to where the user was, success or not.
@@ -191,18 +191,24 @@ class OBJECT_OT_poly_optimize_rebuild_uvs(bpy.types.Operator):
                 bpy.ops.object.mode_set(mode="EDIT")
             return {"CANCELLED"}
 
-        _rebuild_uvs(context, targets)
+        rebuilt = _rebuild_uvs(context, targets, self.report)
         if edit_mode:
             bpy.ops.object.mode_set(mode="EDIT")
+        if not rebuilt:
+            return {"CANCELLED"}
         self.report(
-            {"INFO"}, f"Rebuilt the UV layout of {len(targets)} object(s)"
+            {"INFO"},
+            f"Rebuilt the UV layout of {rebuilt} of {len(targets)} "
+            "object(s)",
         )
         return {"FINISHED"}
 
 
 def _rebuild_uvs(
-    context: bpy.types.Context, objects: list[bpy.types.Object]
-) -> None:
+    context: bpy.types.Context,
+    objects: list[bpy.types.Object],
+    report,
+) -> int:
     """Re-unwrap each object's whole mesh with Smart UV Project.
 
     Always unwraps the entire mesh — re-unwrapping only a selection would
@@ -211,9 +217,18 @@ def _rebuild_uvs(
     Mode with everything selected; the user's element selection is saved
     and restored around that (topology is unchanged by unwrapping, so the
     flags map one-to-one). A UV map is created when none exists.
+
+    UV operators are picky about the editor area they are invoked from,
+    and these buttons live in the Properties editor — so the ops run
+    under a 3D-viewport context override when one is available. Failures
+    are reported per object instead of aborting the batch; returns the
+    number of objects whose layout actually changed.
     """
+    override = _view3d_override(context)
     view_layer = context.view_layer
     previous = view_layer.objects.active
+    rebuilt = 0
+
     for obj in objects:
         mesh = obj.data
         saved = (
@@ -221,13 +236,23 @@ def _rebuild_uvs(
             [e.select for e in mesh.edges],
             [p.select for p in mesh.polygons],
         )
+        before = _uv_signature(mesh)
         view_layer.objects.active = obj
-        bpy.ops.object.mode_set(mode="EDIT")
-        bpy.ops.mesh.select_all(action="SELECT")
-        bpy.ops.uv.smart_project(
-            angle_limit=math.radians(66.0), island_margin=0.02
-        )
-        bpy.ops.object.mode_set(mode="OBJECT")
+        try:
+            if override:
+                with context.temp_override(**override):
+                    _smart_project_active()
+            else:
+                _smart_project_active()
+        except RuntimeError as error:
+            report(
+                {"WARNING"},
+                f"'{obj.name}': UV rebuild failed — {error}",
+            )
+        finally:
+            if context.mode != "OBJECT":
+                bpy.ops.object.mode_set(mode="OBJECT")
+
         mesh = obj.data
         for v, flag in zip(mesh.vertices, saved[0]):
             v.select = flag
@@ -235,7 +260,55 @@ def _rebuild_uvs(
             e.select = flag
         for p, flag in zip(mesh.polygons, saved[2]):
             p.select = flag
+
+        after = _uv_signature(mesh)
+        if after and after != before:
+            rebuilt += 1
+        else:
+            report(
+                {"WARNING"},
+                f"'{obj.name}': UV layout is unchanged after the rebuild",
+            )
+
     view_layer.objects.active = previous
+    return rebuilt
+
+
+def _smart_project_active() -> None:
+    """Smart-UV-Project the active object (must be in Object Mode)."""
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.uv.smart_project(
+        angle_limit=math.radians(66.0), island_margin=0.02
+    )
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+
+def _view3d_override(context: bpy.types.Context) -> dict:
+    """Locate a 3D-viewport area for a context override, if any."""
+    window = context.window
+    if window is None:
+        return {}
+    for area in window.screen.areas:
+        if area.type == "VIEW_3D":
+            region = next(
+                (r for r in area.regions if r.type == "WINDOW"), None
+            )
+            if region is not None:
+                return {"window": window, "area": area, "region": region}
+    return {}
+
+
+def _uv_signature(mesh: bpy.types.Mesh) -> tuple:
+    """Small sample of the active UV layer, used to detect layout changes."""
+    layer = mesh.uv_layers.active
+    if layer is None or not layer.data:
+        return ()
+    return tuple(
+        round(coord, 5)
+        for item in layer.data[:16]
+        for coord in item.uv
+    )
 
 
 def _target_objects(context: bpy.types.Context) -> list[bpy.types.Object]:
