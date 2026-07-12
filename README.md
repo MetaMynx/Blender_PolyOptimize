@@ -3,7 +3,8 @@ A Blender Add-On that optimizes generated 3D assets (AI-generated models, Sketch
 
 *No more having to deal with "Millions of polys for a simple box".*
 
-![[docs/polyOpti_img02-steppedSimplify.png]]![[docs/polyOpti_img03-EditMode.png]]
+<img src="https://github.com/MetaMynx/Blender_PolyOptimize/blob/main/docs/polyOpti_img02-steppedSimplify.png" height="100%" width="100%" />
+<img src="https://github.com/MetaMynx/Blender_PolyOptimize/blob/main/docs/polyOpti_img03-EditMode.png" height="50%" width="50%" />
 
 ## Installation
 
@@ -14,7 +15,7 @@ A Blender Add-On that optimizes generated 3D assets (AI-generated models, Sketch
 	- `Edit > Preferences > Add-ons > v (top-right) > Install from Disk...` and pick the zip.
 	*or:*
 	- Drag-and-drop the zip directly into Blender, ensure `Enable Add-on` is Checked, and click `Ok`. 
-	![[docs/polyOpti_img01-Install.png]]
+	<img src="https://github.com/MetaMynx/Blender_PolyOptimize/blob/main/docs/polyOpti_img01-Install.png" />
 3. Enable **PolyOptimize** if it isn't enabled automatically, or wasn't enabled when adding directly. This can be found in `Edit > Preferences > Add-ons`.
 
 ## Where to Find it
@@ -25,7 +26,7 @@ The panel appears in **two places** (shared settings):
 - **3D Viewport > Sidebar (press N) > PolyOptimize tab.**
 - **Add Modifier > Edit > PolyOptimize** - runs the optimizer immediately with the current panel settings. (Python add-ons can't register native stack modifiers, so this is a shortcut entry, not a live modifier.)
 
-Settings do **not** live-preview like a modifier - they take effect when you click **Optimize Polygons**. The button works in Object Mode and Edit Mode.
+**IMPORTANT:** Settings do **not** live-preview like a modifier - they take effect when you click **Optimize Polygons**. The button works in Object Mode and Edit Mode.
 
 **Edit Mode = partial optimization.** Select any part of the mesh (vertices, edges, or faces), and the optimizer processes only that selection, applied directly to the model (Ctrl+Z to revert -- the Result dropdown is ignored in Edit Mode). Detail reduction is rescaled so "Detail Kept" applies to the selected region rather than the whole mesh, and the border between the selection and the rest of the mesh is never broken.
 
@@ -51,11 +52,11 @@ A toggle at the top of the panel switches all labels between plain-language word
 
 ### Basic Mode
 The Default (Beginner-friendly) - e.g. "Flatness Sensitivity", "Protect Texture Seams".
-![[docs/polyOpti_img04-labelBasic.png]]
+<img src="https://github.com/MetaMynx/Blender_PolyOptimize/blob/main/docs/polyOpti_img04-labelBasic.png" />
 
 ### Advanced Mode
 Standard Blender terminology - e.g. "Planar Tolerance", "Preserve UV Seams".
-  ![[docs/polyOpti_img05-labelAdv.png]]
+  <img src="https://github.com/MetaMynx/Blender_PolyOptimize/blob/main/docs/polyOpti_img05-labelAdv.png" />
 
 ## Settings
 
@@ -110,7 +111,7 @@ I've also read about indie game developers that are trying to work with AI-gener
 
 I sought to solve this with a plugin that does exactly what I want: it's a fairly basic, very focused plugin, as I still don't know much about Blender, so I am able to limit the scope to *basic functionality*, while still solving a ton of problems for a lot of people (not just myself).
 
--
+--
 
 Despite its minor quirks (please see *Notes & Limitations*)... Everything works as I've tested everything as much as I could (within the realm of my limited Blender knowledge), and I'm very happy with what Fable5 produced.
 
