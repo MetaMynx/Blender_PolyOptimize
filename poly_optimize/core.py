@@ -28,6 +28,7 @@ group with its ratio rescaled to the selection.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import bmesh
@@ -287,3 +288,119 @@ def _restore_selection_from_group(
         e.select = selected[a] and selected[b]
     for p in mesh.polygons:
         p.select = all(selected[i] for i in p.vertices)
+
+
+def rebuild_uv_box_projection(
+    mesh: bpy.types.Mesh, margin_fraction: float = 0.02
+) -> bool:
+    """Rebuild the active UV layer with an axis-aligned box projection.
+
+    Implemented directly in bmesh — no operators, no mode switches, no
+    context dependencies — because ``bpy.ops.uv.smart_project`` proved
+    unreliable when invoked from panel code. Box projection suits the
+    hard-surface assets this add-on targets: each face is projected
+    along its dominant normal axis, connected same-axis faces form
+    islands, and islands are shelf-packed into the 0–1 UV square with a
+    margin, scaled for uniform texel density. A UV layer is created if
+    none exists.
+
+    Returns True when a layout was written (False for meshes without
+    faces).
+    """
+    if not mesh.polygons:
+        return False
+
+    bm = bmesh.new()
+    try:
+        bm.from_mesh(mesh)
+        uv_layer = bm.loops.layers.uv.active
+        if uv_layer is None:
+            uv_layer = bm.loops.layers.uv.new("UVMap")
+
+        # Bucket faces by dominant normal axis: 0..5 = +X,-X,+Y,-Y,+Z,-Z.
+        def bucket(face: bmesh.types.BMFace) -> int:
+            n = face.normal
+            axis = max(range(3), key=lambda i: abs(n[i]))
+            return axis * 2 + (0 if n[axis] >= 0.0 else 1)
+
+        buckets = {f: bucket(f) for f in bm.faces}
+
+        # Grow islands: connected faces sharing the same bucket.
+        seen: set = set()
+        islands: list[tuple[int, list]] = []
+        for face in bm.faces:
+            if face in seen:
+                continue
+            group = buckets[face]
+            stack, members = [face], []
+            seen.add(face)
+            while stack:
+                current = stack.pop()
+                members.append(current)
+                for edge in current.edges:
+                    for neighbour in edge.link_faces:
+                        if neighbour not in seen and (
+                            buckets[neighbour] == group
+                        ):
+                            seen.add(neighbour)
+                            stack.append(neighbour)
+            islands.append((group, members))
+
+        # Project each island onto its axis plane, in object units so
+        # every island shares one scale (uniform texel density).
+        # Dominant axis -> the two coordinate indices used as (u, v).
+        axis_uv = {0: (1, 2), 1: (0, 2), 2: (0, 1)}
+        projected = []
+        for group, members in islands:
+            axis, flipped = group // 2, group % 2 == 1
+            ui, vi = axis_uv[axis]
+            sign = -1.0 if flipped else 1.0
+            loops_uv = {}
+            for face in members:
+                for loop in face.loops:
+                    co = loop.vert.co
+                    loops_uv[loop] = (co[ui] * sign, co[vi])
+            us = [uv[0] for uv in loops_uv.values()]
+            vs = [uv[1] for uv in loops_uv.values()]
+            projected.append(
+                (loops_uv, min(us), min(vs),
+                 max(us) - min(us), max(vs) - min(vs))
+            )
+
+        # Shelf-pack island bounding boxes into a roughly square atlas.
+        total_area = sum(
+            max(w, 1e-9) * max(h, 1e-9) for *_, w, h in projected
+        )
+        margin = margin_fraction * math.sqrt(total_area)
+        target_width = math.sqrt(total_area) * 1.2
+        projected.sort(key=lambda p: p[4], reverse=True)
+
+        x = y = row_height = atlas_width = 0.0
+        placements = []
+        for loops_uv, min_u, min_v, width, height in projected:
+            width = max(width, margin)
+            height = max(height, margin)
+            if x > 0.0 and x + width > target_width:
+                x = 0.0
+                y += row_height + margin
+                row_height = 0.0
+            placements.append((loops_uv, min_u, min_v, x, y))
+            x += width + margin
+            row_height = max(row_height, height)
+            atlas_width = max(atlas_width, x)
+        atlas_height = y + row_height
+
+        # Normalise the atlas into the 0-1 square (uniform scale).
+        scale = 1.0 / max(atlas_width, atlas_height, 1e-12)
+        for loops_uv, min_u, min_v, offset_x, offset_y in placements:
+            for loop, (u, v) in loops_uv.items():
+                loop[uv_layer].uv = (
+                    (offset_x + u - min_u) * scale,
+                    (offset_y + v - min_v) * scale,
+                )
+
+        bm.to_mesh(mesh)
+    finally:
+        bm.free()
+    mesh.update()
+    return True

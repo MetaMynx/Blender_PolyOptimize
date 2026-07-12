@@ -12,7 +12,7 @@ from __future__ import annotations
 bl_info = {
     "name": "PolyOptimize",
     "author": "Aria Cheng",
-    "version": (1, 6, 1),
+    "version": (1, 6, 2),
     "blender": (4, 2, 0),
     "location": "Properties > Modifiers and View3D > Sidebar > PolyOptimize",
     "description": (

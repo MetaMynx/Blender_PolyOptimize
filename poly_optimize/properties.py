@@ -179,8 +179,8 @@ class PolyOptimizeSettings(bpy.types.PropertyGroup):
             "the whole model — even when only a selection was optimized, "
             "so the layout stays clean. A new UV map is created if the "
             "model has none. Warning: textures painted for the old "
-            "layout will no longer line up. (Technical: Smart UV Project "
-            "on all faces)"
+            "layout will no longer line up. (Technical: axis-aligned "
+            "box projection with shelf-packed islands)"
         ),
         default=False,
     )
