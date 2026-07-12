@@ -3,7 +3,7 @@ A Blender Add-On that optimizes generated 3D assets (AI-generated models, Sketch
 
 *No more having to deal with "Millions of polys for a simple box".*
 
-![[polyOpti_img02-steppedSimplify.png]]![[polyOpti_img03-EditMode.png]]
+![[docs/polyOpti_img02-steppedSimplify.png]]![[docs/polyOpti_img03-EditMode.png]]
 
 ## Installation
 
@@ -14,7 +14,7 @@ A Blender Add-On that optimizes generated 3D assets (AI-generated models, Sketch
 	- `Edit > Preferences > Add-ons > v (top-right) > Install from Disk...` and pick the zip.
 	*or:*
 	- Drag-and-drop the zip directly into Blender, ensure `Enable Add-on` is Checked, and click `Ok`. 
-	![[polyOpti_img01-Install.png]]
+	![[docs/polyOpti_img01-Install.png]]
 3. Enable **PolyOptimize** if it isn't enabled automatically, or wasn't enabled when adding directly. This can be found in `Edit > Preferences > Add-ons`.
 
 ## Where to Find it
@@ -51,11 +51,11 @@ A toggle at the top of the panel switches all labels between plain-language word
 
 ### Basic Mode
 The Default (Beginner-friendly) - e.g. "Flatness Sensitivity", "Protect Texture Seams".
-![[polyOpti_img04-labelBasic.png]]
+![[docs/polyOpti_img04-labelBasic.png]]
 
 ### Advanced Mode
 Standard Blender terminology - e.g. "Planar Tolerance", "Preserve UV Seams".
-  ![[polyOpti_img05-labelAdv.png]]
+  ![[docs/polyOpti_img05-labelAdv.png]]
 
 ## Settings
 
@@ -110,7 +110,7 @@ I've also read about indie game developers that are trying to work with AI-gener
 
 I sought to solve this with a plugin that does exactly what I want: it's a fairly basic, very focused plugin, as I still don't know much about Blender, so I am able to limit the scope to *basic functionality*, while still solving a ton of problems for a lot of people (not just myself).
 
----
+-
 
 Despite its minor quirks (please see *Notes & Limitations*)... Everything works as I've tested everything as much as I could (within the realm of my limited Blender knowledge), and I'm very happy with what Fable5 produced.
 
