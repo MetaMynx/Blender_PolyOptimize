@@ -291,7 +291,9 @@ def _restore_selection_from_group(
 
 
 def rebuild_uv_box_projection(
-    mesh: bpy.types.Mesh, margin_fraction: float = 0.02
+    mesh: bpy.types.Mesh,
+    margin_fraction: float = 0.02,
+    layer_name: str | None = None,
 ) -> bool:
     """Rebuild the active UV layer with an axis-aligned box projection.
 
@@ -301,8 +303,9 @@ def rebuild_uv_box_projection(
     hard-surface assets this add-on targets: each face is projected
     along its dominant normal axis, connected same-axis faces form
     islands, and islands are shelf-packed into the 0–1 UV square with a
-    margin, scaled for uniform texel density. A UV layer is created if
-    none exists.
+    margin, scaled for uniform texel density. Writes to *layer_name*
+    (created if missing) when given, else to the active UV layer (created
+    if none exists).
 
     Returns True when a layout was written (False for meshes without
     faces).
@@ -313,9 +316,14 @@ def rebuild_uv_box_projection(
     bm = bmesh.new()
     try:
         bm.from_mesh(mesh)
-        uv_layer = bm.loops.layers.uv.active
-        if uv_layer is None:
-            uv_layer = bm.loops.layers.uv.new("UVMap")
+        if layer_name is not None:
+            uv_layer = bm.loops.layers.uv.get(layer_name)
+            if uv_layer is None:
+                uv_layer = bm.loops.layers.uv.new(layer_name)
+        else:
+            uv_layer = bm.loops.layers.uv.active
+            if uv_layer is None:
+                uv_layer = bm.loops.layers.uv.new("UVMap")
 
         # Bucket faces by dominant normal axis: 0..5 = +X,-X,+Y,-Y,+Z,-Z.
         def bucket(face: bmesh.types.BMFace) -> int:

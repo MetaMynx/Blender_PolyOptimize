@@ -184,6 +184,33 @@ class PolyOptimizeSettings(bpy.types.PropertyGroup):
         ),
         default=False,
     )
+    bake_textures: BoolProperty(
+        name="Bake Textures to New UVs",
+        description=(
+            "When rebuilding UVs on a model that already has image "
+            "textures, also render ('bake') the old textures into new "
+            "images that match the new layout — so the model keeps "
+            "looking the same. Bakes the full PBR set as needed: colour "
+            "always, plus roughness, metallic and normal/bump maps when "
+            "the materials use them; plain number values are copied "
+            "directly. Materials are simplified to a standard textured "
+            "shader. (Technical: Cycles bakes — diffuse colour, "
+            "roughness, EMIT-routed metallic, tangent normals — from "
+            "the old UV map into atlases on the rebuilt map)"
+        ),
+        default=True,
+    )
+    bake_resolution: EnumProperty(
+        name="Bake Resolution",
+        description="Size of the new texture image created by the bake",
+        items=(
+            ("512", "512 px", "Small and fast"),
+            ("1024", "1024 px", "Good default"),
+            ("2048", "2048 px", "High detail, slower"),
+            ("4096", "4096 px", "Very high detail, slow"),
+        ),
+        default="1024",
+    )
     triangulate: BoolProperty(
         name="Triangulate Result",
         description=(

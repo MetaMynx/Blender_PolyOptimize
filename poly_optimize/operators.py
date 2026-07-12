@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import bpy
 
-from . import core, util
+from . import bake, core, util
 
 # Modes the operator can run from. In Edit Mode the optimization is
 # confined to the selection and applied in place.
@@ -216,20 +216,32 @@ def _rebuild_uvs(
     when invoked from panel code. Objects must be in Object Mode.
     Failures are reported per object; returns the rebuilt count.
     """
+    settings = context.scene.poly_optimize
     rebuilt = 0
     for obj in objects:
+        use_bake = (
+            settings.bake_textures
+            and len(obj.data.uv_layers) > 0
+            and bake.has_image_textures(obj)
+        )
         try:
-            written = core.rebuild_uv_box_projection(obj.data)
+            if use_bake:
+                written = bake.bake_to_new_layout(
+                    context, obj, int(settings.bake_resolution), report
+                )
+            else:
+                written = core.rebuild_uv_box_projection(obj.data)
+                if not written:
+                    report(
+                        {"WARNING"},
+                        f"'{obj.name}': no faces to unwrap, "
+                        "UV layout untouched",
+                    )
         except Exception as error:  # noqa: BLE001 — report, don't crash
             report({"WARNING"}, f"'{obj.name}': UV rebuild failed — {error}")
             continue
         if written:
             rebuilt += 1
-        else:
-            report(
-                {"WARNING"},
-                f"'{obj.name}': no faces to unwrap, UV layout untouched",
-            )
     return rebuilt
 
 

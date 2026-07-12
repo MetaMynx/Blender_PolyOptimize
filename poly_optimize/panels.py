@@ -33,6 +33,10 @@ _LABELS: dict[str, tuple[str, str]] = {
     "detail_percent": ("Detail Kept", "Decimate Ratio"),
     "use_weld": ("Merge Overlapping Points", "Weld Duplicate Vertices"),
     "regenerate_uvs": ("Rebuild Texture Map (UVs)", "Regenerate UVs"),
+    "bake_textures": (
+        "Keep Textures Looking Right (Bake)", "Bake Textures to New UVs"
+    ),
+    "bake_resolution": ("New Texture Size", "Bake Resolution"),
     "weld_distance": ("Merge Distance", "Weld Distance"),
     "preserve_seams": ("Protect Texture Seams", "Preserve UV Seams"),
     "preserve_sharp": ("Protect Sharp Corners", "Preserve Sharp Edges"),
@@ -95,6 +99,10 @@ def _draw(layout: bpy.types.UILayout, context: bpy.types.Context) -> None:
     sub.active = settings.use_weld
     sub.prop(settings, "weld_distance", text=label("weld_distance"))
     col.prop(settings, "regenerate_uvs", text=label("regenerate_uvs"))
+    col.prop(settings, "bake_textures", text=label("bake_textures"))
+    sub = col.column()
+    sub.active = settings.bake_textures
+    sub.prop(settings, "bake_resolution", text=label("bake_resolution"))
 
     col = layout.column(heading=label("heading_preserve"))
     col.prop(settings, "preserve_seams", text=label("preserve_seams"))
