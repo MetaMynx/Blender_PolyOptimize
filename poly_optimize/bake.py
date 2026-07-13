@@ -21,11 +21,22 @@ metallic + normal maps; SketchUp assets usually just colour):
   tangent space of the new layout.
 - **metallic** — when linked.
 
-Colour, roughness and metallic are each captured by temporarily routing
-that channel through an emission shader and baking the EMIT pass. This
-is immune to the classic diffuse-bake failure where metallic or glossy
-surfaces (monitor screens, metal parts) bake black, because metals have
-no diffuse component.
+Two capture strategies, chosen per object:
+
+- **Emission rigs** (preferred) — when every material's Principled node
+  is reachable from its output, colour/roughness/metallic are each
+  routed through a temporary emission shader and baked with the EMIT
+  pass. Immune to the classic diffuse-bake failure where metallic or
+  glossy surfaces (monitor screens, metal parts) bake black.
+- **Diffuse fallback** — when any material hides its shader inside a
+  node group or uses a non-Principled shader, rigging is impossible, so
+  colour is baked with the plain diffuse pass instead (which captures
+  any shader, at the cost of the metallic edge case). Roughness and
+  metallic images are skipped in this mode; scalar values still copy.
+
+Plain-colour materials (no image textures) are baked too — unlinked
+inputs simply bake as flat regions, which is exactly what a game-export
+atlas needs.
 
 Unlinked scalar inputs (e.g. plain "roughness 0.4") are copied onto the
 rewired material instead of baking an image. Shared materials are
@@ -61,13 +72,16 @@ _CHANNEL_SOCKETS = {
 }
 
 
-def has_image_textures(obj: bpy.types.Object) -> bool:
-    """True if any of *obj*'s materials samples an image texture."""
-    for material in _node_materials(obj):
-        for node in material.node_tree.nodes:
-            if node.type == "TEX_IMAGE" and node.image is not None:
-                return True
-    return False
+def bakeable(obj: bpy.types.Object) -> bool:
+    """True if *obj* has any node-based material worth baking.
+
+    Plain-colour materials count: their colours bake into flat atlas
+    regions, which is exactly what game-export texturing needs.
+    """
+    return any(
+        slot.material is not None and slot.material.use_nodes
+        for slot in obj.material_slots
+    )
 
 
 def bake_to_new_layout(
@@ -109,7 +123,13 @@ def bake_to_new_layout(
 
     materials = _node_materials(obj)
     scalars = {m.name: _capture_scalars(m) for m in materials}
-    passes = _needed_passes(materials)
+    # Emission rigs need a reachable Principled node in every material;
+    # otherwise fall back to the diffuse pass, which captures any shader
+    # (including ones wrapped inside node groups).
+    use_rigs = bool(materials) and all(
+        _surface_principled(m) is not None for m in materials
+    )
+    passes = _needed_passes(materials, use_rigs)
 
     # Every material needs an active image-texture node holding the bake
     # target image; remember previous active nodes to restore afterwards.
@@ -130,6 +150,8 @@ def bake_to_new_layout(
             if pass_name not in passes:
                 continue
             bake_kwargs, colorspace, float_buffer = _PASS_CONFIG[pass_name]
+            if pass_name == "color" and not use_rigs:
+                bake_kwargs = {"type": "DIFFUSE", "pass_filter": {"COLOR"}}
             image = bpy.data.images.new(
                 name=f"{obj.name}_baked_{pass_name}",
                 width=resolution,
@@ -142,7 +164,7 @@ def bake_to_new_layout(
                 node.image = image
 
             emission_rigs = []
-            if pass_name in _EMISSION_PASSES:
+            if use_rigs and pass_name in _EMISSION_PASSES:
                 emission_rigs = [
                     _rig_channel_emission(m, pass_name) for m in materials
                 ]
@@ -238,26 +260,57 @@ def _surface_principled(
     return _first_principled(material)
 
 
-def _needed_passes(materials: list[bpy.types.Material]) -> set[str]:
-    """Colour always; other passes only when a material links that input."""
+def _needed_passes(
+    materials: list[bpy.types.Material], use_rigs: bool
+) -> set[str]:
+    """Colour always; other passes only when a material links that input.
+
+    Without emission rigs, roughness/metallic cannot be captured (no
+    bake pass exists for them), so only colour and normals are baked.
+    """
     passes = {"color"}
     for material in materials:
-        principled = _surface_principled(material)
+        principled = (
+            _surface_principled(material)
+            if use_rigs
+            else _find_principled_recursive(material.node_tree)
+        )
         if principled is None:
             continue
-        for pass_name, socket in (
-            ("roughness", "Roughness"),
-            ("metallic", "Metallic"),
-            ("normal", "Normal"),
-        ):
-            if principled.inputs[socket].is_linked:
-                passes.add(pass_name)
+        if use_rigs:
+            for pass_name, socket in (
+                ("roughness", "Roughness"),
+                ("metallic", "Metallic"),
+            ):
+                if principled.inputs[socket].is_linked:
+                    passes.add(pass_name)
+        if principled.inputs["Normal"].is_linked:
+            passes.add("normal")
     return passes
+
+
+def _find_principled_recursive(
+    tree: bpy.types.NodeTree | None, depth: int = 0
+) -> bpy.types.Node | None:
+    """First Principled node in *tree*, descending into node groups."""
+    if tree is None or depth > 3:
+        return None
+    for node in tree.nodes:
+        if node.type == "BSDF_PRINCIPLED":
+            return node
+    for node in tree.nodes:
+        if node.type == "GROUP":
+            found = _find_principled_recursive(node.node_tree, depth + 1)
+            if found is not None:
+                return found
+    return None
 
 
 def _capture_scalars(material: bpy.types.Material) -> dict:
     """Remember unlinked scalar inputs so the rewire can copy them."""
     principled = _surface_principled(material)
+    if principled is None:
+        principled = _find_principled_recursive(material.node_tree)
     if principled is None:
         return {}
     values = {}

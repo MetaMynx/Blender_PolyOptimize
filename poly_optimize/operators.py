@@ -219,12 +219,14 @@ def _rebuild_uvs(
     settings = context.scene.poly_optimize
     rebuilt = 0
     for obj in objects:
-        use_bake = (
-            settings.bake_textures
-            and len(obj.data.uv_layers) > 0
-            and bake.has_image_textures(obj)
-        )
+        use_bake = settings.bake_textures and bake.bakeable(obj)
         try:
+            if settings.bake_textures and not use_bake:
+                report(
+                    {"INFO"},
+                    f"'{obj.name}': no materials — nothing to bake, "
+                    "layout rebuilt only",
+                )
             if use_bake:
                 written = bake.bake_to_new_layout(
                     context, obj, int(settings.bake_resolution), report

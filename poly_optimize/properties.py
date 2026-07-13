@@ -187,10 +187,11 @@ class PolyOptimizeSettings(bpy.types.PropertyGroup):
     bake_textures: BoolProperty(
         name="Bake Textures to New UVs",
         description=(
-            "When rebuilding UVs on a model that already has image "
-            "textures, also render ('bake') the old textures into new "
-            "images that match the new layout — so the model keeps "
-            "looking the same. Bakes the full PBR set as needed: colour "
+            "When rebuilding UVs, also render ('bake') the model's "
+            "materials into new images that match the new layout — so "
+            "the model keeps looking the same. Works for image textures "
+            "AND plain colours (flat colours become atlas regions, handy "
+            "for game export). Bakes the full PBR set as needed: colour "
             "always, plus roughness, metallic and normal/bump maps when "
             "the materials use them; plain number values are copied "
             "directly. Materials are simplified to a standard textured "
